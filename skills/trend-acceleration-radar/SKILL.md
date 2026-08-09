@@ -80,6 +80,14 @@ A = k_recent / k_prior
 
 A is the discriminator almost nobody computes, because it requires keeping history. Start logging series before you need them; you cannot reconstruct acceleration from a single snapshot, and that constraint is why this is defensible.
 
+**Guard A with peak-proximity, or it will hand you dead-cat bounces.** A is a ratio, so it explodes when `k_prior` is near zero — which is exactly what happens to something that collapsed and then twitched upward. In one 101-candidate screen the top four hits by A were all at 26–49% of their own historical peak; the genuine risers ranked below them. Require the series to still be near its own high, because a real riser is at its peak more or less by construction:
+
+```
+peak_fraction = latest / max(series)      # demand >= ~0.75
+```
+
+Then rank on `k_recent` itself rather than on A, and read A as the secondary confirmation that the rate is still increasing. Ratio for classification, rate for ranking.
+
 ### Doubling time (T2)
 
 `T2 = ln(2) / k`. More intuitive than a slope, and the trajectory of T2 is the phase: **shrinking T2 = accelerating, lengthening T2 = saturating**. Also a build-budget check — if T2 is 4 days, anything taking longer than about two doublings to ship will land into a different market than the one you measured.
