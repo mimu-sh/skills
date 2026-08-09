@@ -42,6 +42,20 @@ GET https://hn.algolia.com/api/v1/search_by_date
 
 `hitsPerPage=0` returns just `nbHits` — a count, cheaply. Loop over monthly or weekly buckets to build the series. Add `&tags=comment` for a separate, noisier, higher-frequency series.
 
+**`nbHits` can be a wild over-estimate on large result sets — gate on magnitude, not on the `exhaustiveNbHits` flag.** An unfiltered monthly query returned `nbHits: 366301` for a month whose true story total was 31,310 — an 11× error. Retrying does not help; the approximation is deterministic and cached.
+
+The intuitive fix is to trust `exhaustiveNbHits`, and it is wrong in both directions. That flag tracks Algolia's internal query budget, not count truncation: the same query returned `exhaustiveNbHits: true` and `false` on different calls with an identical count, and small counts routinely come back with the flag false while being exactly right. Paginating `search_by_date` and counting hits by hand confirmed nbHits values of 41, 13, and 11 were all exact *with the flag false*. Gating on it discards most of your good data.
+
+What actually predicts a bad count is the result set being large relative to the bucket. So:
+
+```python
+n = nbHits(term, bucket)
+if n > 0.2 * total_stories_in(bucket):      # no term is a fifth of all HN
+    n = sum(nbHits(term, wk) for wk in weeks_in(bucket))   # sub-buckets are exact
+```
+
+Worth being strict about, because of the failure mode: one inflated early bucket followed by exact later buckets manufactures a *decay* curve out of a flat one, and a dropped bucket manufactures a spike. Both are indistinguishable from real trend signal.
+
 HN exposure also has a measurable downstream effect: an event-study of 138 AI/LLM repository launches found average GitHub star gains of roughly 121 at 24h, 189 at 48h, and 289 at 7 days, with medians far below the means — a long-tail distribution where a few launches dominate. Treat HN as a *shock source*, not just a mention counter: an HN front page hit is an intervention on the star series, and acceleration measured across that boundary is contaminated.
 
 ### npm downloads — free, no key, the best developer commitment signal
@@ -204,6 +218,8 @@ Two design notes that matter more than they look:
 
 - **Store raw values, compute metrics downstream.** You will change the metric definitions; you cannot un-lose raw data.
 - **Log the collection timestamp separately from the data date.** Many APIs revise recent values, and you need to know which vintage you acted on.
+- **Drop the trailing partial bucket, always.** Today is almost never the end of a week or month, so the newest bucket is a fraction of a period and reads as a collapse. Since acceleration is dominated by the most recent window, one partial bucket is enough to turn a healthy series into a fake "decay" verdict — and it does it to *every* series at once, which is the tell. If a whole screen suddenly reads as decaying, suspect the harness before the world.
+- **Normalize against platform volume where the platform itself drifts.** Total HN story volume moved from ~24k to ~34k per month over 16 months; a term holding constant share was silently "growing" 40% until divided through.
 
 Aliases deserve explicit handling: trends get renamed mid-flight, and a series that splits across two names looks like two dying trends instead of one accelerating one.
 
