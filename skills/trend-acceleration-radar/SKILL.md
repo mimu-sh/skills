@@ -102,6 +102,13 @@ The highest-signal-per-unit-effort metric in the whole discipline. Dividing by t
 
 Rule of thumb: R ≥ 10 is worth a look, R ≥ 25 with rising breadth is worth acting on.
 
+**Only compare R within a cohort, never across topic types.** R measures how far content beat its own channel's baseline, which makes it a measure of *entertainment potential*, not of adoption. Measured across 273 YouTube videos in 12 topics, the deliberately-dead control topics beat the genuinely-accelerating ones almost three to one — 70% of control videos cleared R>10 versus 32% of the flagged ones — because visually entertaining consumer subjects have enormous creator ecosystems where a random channel can go viral, while B2B and technical subjects are covered by specialists whose audience already matches the topic, pinning R near 1. The single biggest outlier in that run (R=1343) was a food-entertainment channel making matcha ice cream, which says nothing whatever about matcha as a market.
+
+So read R by the play you intend:
+
+- **Content plays** — R is directly useful and means what you want: high R says there is unmet appetite the existing channels are not serving, so make the content.
+- **Tool or product plays** — R is close to worthless as an adoption proxy. Use commitment series instead, and let a high R on a dry, unglamorous subject be the interesting case rather than the disqualifying one.
+
 ### Breadth ratio (B)
 
 ```
