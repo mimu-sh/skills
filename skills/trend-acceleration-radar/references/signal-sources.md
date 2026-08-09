@@ -94,6 +94,45 @@ GET https://api.github.com/search/repositories
 
 Commitment counterparts on GitHub: **forks**, **distinct contributors**, **dependent repos**, and issue volume containing "error"/"how do I". Stars cost nothing; those cost effort.
 
+### Patents — complete or truncated depending entirely on which date you query
+
+Patents are widely recommended as a leading indicator. Measured against the USPTO
+Open Data Portal, that recommendation is **wrong for current trends, and wrong in
+a way that manufactures a fake collapse** if you pick the obvious date field.
+
+Total US patent applications, same query, three different date fields:
+
+| Field | 2022 | 2023 | 2024 | 2025 | 2026 (60% elapsed) |
+|---|---|---|---|---|---|
+| `filingDate` | 623k | 623k | 610k | **396k** | **33k** |
+| `grantDate` | 359k | 348k | 372k | 378k | 219k |
+| `earliestPublicationDate` | 417k | 417k | 425k | 393k | 231k |
+
+Applications are not visible until they publish, roughly 18 months after filing.
+So a filing-date series is **truncated at the recent end**, and every term you
+query looks like it is dying. A grant-date or publication-date series is
+**complete** — 219k at 60% through the year annualizes to ~362k, squarely on the
+348–378k baseline — but it describes inventions conceived one to three years ago.
+
+The practical consequences:
+
+- **Never build a recent-trend series on filing date.** It is the same partial-bucket
+  trap as a trailing month, except it spans two years and is invisible unless you
+  check a control total.
+- **Patents are a lagging confirmation, not a leading indicator.** The publication
+  delay more than cancels the lead time the theory promises. Use them to
+  characterise an established field, not to catch a rising one.
+- **Trademarks do not share this problem** and remain genuinely leading —
+  applications publish within days, and filing one means money spent to claim a
+  category before launch. But USPTO exposes trademarks as **bulk XML only**
+  (daily and annual application files, plus a researcher case-file extract);
+  there is no trademark search API. Budget a download-and-parse pipeline, not a
+  query, and only build it once a specific niche justifies the cost.
+
+The general lesson generalises past patents: **when a source has a publication or
+settlement delay, ask which timestamp the API filters on.** Event-date filtering
+truncates; record-date filtering lags. Truncation lies, lag merely delays.
+
 ### Stack Overflow / Stack Exchange — pure commitment signal
 
 People only ask questions about things they are actually using and stuck on.
