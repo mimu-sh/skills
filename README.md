@@ -1,9 +1,9 @@
 # skills
 
-Agent skills from [mama-sh](https://github.com/mama-sh). Works with Claude Code, Cursor, and any agent that reads `SKILL.md` skills.
+Agent skills from [mimu-sh](https://github.com/mimu-sh). Works with Claude Code, Cursor, and any agent that reads `SKILL.md` skills.
 
 ```bash
-npx skills add mama-sh/skills
+npx skills add mimu-sh/skills
 ```
 
 | Skill | What it does |
@@ -17,13 +17,13 @@ npx skills add mama-sh/skills
 Anyone can see what is popular. Popularity is the *level* of a curve, and by the time the level is high the money is gone. The exploitable window is the stretch where the growth rate is itself still increasing, adoption is visible enough to verify but not yet served by tooling, and the crowd arriving behind you is large enough to pay for what you built.
 
 ```bash
-npx skills add mama-sh/skills@trend-acceleration-radar
+npx skills add mimu-sh/skills@trend-acceleration-radar
 ```
 
 Or try it without installing:
 
 ```bash
-npx skills use mama-sh/skills@trend-acceleration-radar
+npx skills use mimu-sh/skills@trend-acceleration-radar
 ```
 
 ### What it actually does
