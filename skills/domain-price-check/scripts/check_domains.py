@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -63,6 +64,48 @@ def _retry(fn, tries=5, delay=0.7):
             last = e
             time.sleep(delay * (i + 1))
     raise last
+
+
+def _utc(ts):
+    """
+    Render a registry timestamp without losing the zone.
+
+    GA opens at one instant worldwide and desirable names go in the first
+    seconds, so "2026-11-17 16:00" with the Z dropped is not a harmless
+    shortening - it reads as local time and sends someone to the keyboard at
+    the wrong hour.
+    """
+    if not ts:
+        return ""
+    try:
+        dt = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return ts
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def flat_runs(phases):
+    """
+    Group phases that are BOTH consecutive and identically priced.
+
+    Adjacency is the whole point: a flat run means "the later day buys you
+    nothing extra". Grouping by price alone pairs sunrise with golive whenever
+    a premium tier happens to price them the same, which is wrong advice -
+    those two are months apart and sunrise is trademark-holders only.
+    """
+    runs, current = [], []
+    for name, price in phases.items():
+        if current and current[-1][1] == price:
+            current.append((name, price))
+        else:
+            if len(current) > 1:
+                runs.append([n for n, _ in current])
+            current = [(name, price)]
+    if len(current) > 1:
+        runs.append([n for n, _ in current])
+    return runs
 
 
 def _pick(products, process):
@@ -153,6 +196,11 @@ def via_gandi_api(fqdn, key, currency, country):
                   premium, status == "unavailable_reserved")
 
 
+def _no_follow(path, flags):
+    """Refuse to open a symlink - a planted link would redirect the read."""
+    return os.open(path, flags | getattr(os, "O_NOFOLLOW", 0))
+
+
 def _rdap_servers():
     """
     TLD -> authoritative RDAP base URL, from IANA's bootstrap registry.
@@ -167,27 +215,39 @@ def _rdap_servers():
     global _BOOTSTRAP
     if _BOOTSTRAP is not None:
         return _BOOTSTRAP
-    cache = os.path.join(tempfile.gettempdir(), "rdap-bootstrap.json")
+    cache_dir = os.path.join(
+        os.environ.get("XDG_CACHE_HOME")
+        or os.path.join(os.path.expanduser("~"), ".cache"),
+        "domain-price-check")
+    cache = os.path.join(cache_dir, "rdap-bootstrap.json")
     body = None
     try:
         if os.path.exists(cache) and time.time() - os.path.getmtime(cache) < 7 * 86400:
-            body = open(cache).read()
+            with open(cache, "r", opener=_no_follow) as fh:
+                body = fh.read()
     except OSError:
         body = None
     if body is None:
         _, body = _get(RDAP_BOOTSTRAP, {"Accept": "application/json"}, timeout=30)
         try:
-            with open(cache, "w") as fh:
+            os.makedirs(cache_dir, mode=0o700, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=cache_dir, prefix=".rdap-", suffix=".json")
+            with os.fdopen(fd, "w") as fh:
                 fh.write(body)
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, cache)          # atomic, and never follows a symlink
         except OSError:
             pass
     servers = {}
     for entry in json.loads(body).get("services", []):
         tlds, urls = (entry + [[], []])[:2]
-        if not urls:
+        # Only https bases. A cache an attacker can write would otherwise
+        # redirect every lookup to a host of their choosing.
+        base = next((u for u in urls if str(u).lower().startswith("https://")), None)
+        if not base:
             continue
         for t in tlds:
-            servers[t.lower().lstrip(".")] = urls[0].rstrip("/") + "/"
+            servers[t.lower().lstrip(".")] = base.rstrip("/") + "/"
     _BOOTSTRAP = servers
     return servers
 
@@ -327,24 +387,20 @@ def main():
         print(f"  renewal    : {info['standard_renewal']} {info['currency'] or ''}")
         if info["phases"]:
             dates = info.get("phase_dates") or {}
-            by_price = {}
-            for k, v in info["phases"].items():
-                by_price.setdefault(v, []).append(k)
+            runs = {n: r for r in flat_runs(info["phases"]) for n in r}
             print(f"  launch phases (price to register during each, "
                   f"{info['currency'] or ''}):")
             for k, v in info["phases"].items():
-                when = (dates.get(k) or "")[:16].replace("T", " ")
-                same = by_price.get(v, [])
-                flag = "  <- same price as " + ", ".join(x for x in same if x != k) \
-                    if len(same) > 1 and k != same[0] else ""
-                print(f"    {k:<9} {str(v):>10}   {when}{flag}")
+                run = runs.get(k)
+                flag = ("  <- same price as " + run[0]) if run and k != run[0] else ""
+                print(f"    {k:<9} {str(v):>10}   {_utc(dates.get(k))}{flag}")
             eap = {k: v for k, v in info["phases"].items() if k.startswith("eap")}
             if eap:
                 cheapest = min(eap.values())
                 first = next(k for k, v in eap.items() if v == cheapest)
                 ga = info["standard_first_year"]
                 print(f"\n  Cheapest early-access rung is {cheapest} at {first} "
-                      f"({(dates.get(first) or '')[:16].replace('T', ' ')}).")
+                      f"({_utc(dates.get(first))}).")
                 if ga:
                     print(f"  That is a one-off surcharge of ~{round(cheapest - ga, 2)} "
                           f"over the {ga} general-availability price, and it buys a "

@@ -203,7 +203,12 @@ skills/domain-price-check/
 ├── references/
 │   ├── providers.md              registrar API comparison + the parsing trap
 │   └── launch-phases.md          sunrise/EAP/GA mechanics, EAP economics
-└── scripts/check_domains.py      availability, tier, renewal, phase ladder
+├── scripts/check_domains.py      availability, tier, renewal, phase ladder
+└── scripts/test_check_domains.py contract tests pinning the parser to real payloads
+```
+
+```bash
+python3 -m unittest discover -s skills/domain-price-check/scripts -p 'test_*.py'
 ```
 
 #### On the data source
