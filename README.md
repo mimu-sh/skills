@@ -9,6 +9,7 @@ npx skills add mimu-sh/skills
 | Skill | What it does |
 |---|---|
 | [`trend-acceleration-radar`](skills/trend-acceleration-radar) | Find trends in the acceleration phase — past emergence, before saturation — and pick the monetization play that fits where the trend actually is |
+| [`domain-price-check`](skills/domain-price-check) | Check what a domain really costs before you recommend or buy it — premium tier, renewal price, and launch-phase pricing for any TLD |
 
 ---
 
@@ -136,6 +137,97 @@ Built from published work rather than vibes. Principal sources:
 - [Infectivity enhances prediction of viral cascades](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0214453) — onset is predictable, size is not
 - [Launch-day diffusion: Hacker News impact on GitHub stars](https://arxiv.org/html/2511.04453v1) — quantified shock effect on star series
 - [Detecting trends before they break](https://smarterarticles.co.uk/detecting-trends-before-they-break-how-weak-signals-become-strong-evidence) — cross-source fusion, and the absence of a universal rubric
+
+---
+
+## domain-price-check
+
+The advertised price of a TLD applies to the names nobody wants. Registries quietly carve the good phrases into **premium tiers** with a permanently higher annual fee, and an availability check that only answers "taken / not taken" hides this completely.
+
+In `.here` the standard rate is €20.17/yr. `sign.here` renews at **€1,385.33/yr** — 69x, forever — while `signhere.here` sits at the standard rate. Same registry, one word apart. A shortlist priced from the TLD's advertised rate is a shortlist of names whose real cost nobody checked.
+
+```bash
+npx skills add mimu-sh/skills@domain-price-check
+```
+
+Or try it without installing:
+
+```bash
+npx skills use mimu-sh/skills@domain-price-check
+```
+
+### What it actually does
+
+**1. Prices the exact name, not the extension.** Registry premium tiers are per-name, set by the registry rather than the registrar, and they survive transfer — so shopping around finds a few percent, never a way out of the tier. The only reliable signal is a live lookup on that specific string. Tiering targets bare, high-frequency words, so the compound form usually escapes what the bare noun falls into: `sign` premium, `signhere` standard; `menu.eat` €1,385/yr, `ourmenu.eat` €20.17. When a shortlist comes back expensive, re-run it with compounded variants before abandoning the concept.
+
+**2. Ranks on renewal, because the first year is marketing.** Results sort by the number that compounds:
+
+| TLD | First year | Renewal |
+|---|---|---|
+| `.com` | €11.00 | €31.98 |
+| `.app` | €8.99 | €40.00 |
+
+A list ordered by first-year price is ordered by promotion depth.
+
+**3. Reconstructs launch calendars for TLDs that have not launched yet.** `--tld-info` returns every phase, its price and its exact start timestamp, pulled from live registry data — the calendar is otherwise published only as prose in registrar blog posts, and ICANN's own startup export covers just the 2012 round. It also flags **flat rungs**: `.here` prices `eap6` and `eap7` identically at €132.17, so buying on the last day of a rung costs the same as the first and buys a day less exclusivity. Early Access is a descending Dutch auction, not a discount — each day is a one-off surcharge that buys a smaller field, not a guarantee.
+
+**4. Says "unknown" rather than guessing.** Roughly 300 TLDs — `.io` among them — have no RDAP service at all, and a generic RDAP proxy returns 404 both for "unregistered" and "no server for this TLD". Reading those alike reports registered domains as available: `google.io` comes back 404. The script resolves the authoritative server from IANA's bootstrap registry and reports `unknown` when a TLD has none.
+
+### Quick start
+
+```bash
+export GANDI_API_KEY=...        # free Personal Access Token, no purchase needed
+
+# price a shortlist, cheapest renewal first
+python3 scripts/check_domains.py --names signhere,sign,almost --tlds here
+
+# sweep a file of candidates, hide anything registry-premium
+python3 scripts/check_domains.py --names-file names.txt --tlds com,io,dev --standard-only
+
+# launch calendar + Early Access fee ladder
+python3 scripts/check_domains.py --tld-info here
+```
+
+```
+DOMAIN         STATUS      TIER       1ST YR EUR   RENEWAL EUR
+signhere.here  available   standard   20.17        20.17
+almost.here    available   premium    464.01       189.59
+sign.here      available   premium    1,099.12     1,385.33
+```
+
+### Contents
+
+```
+skills/domain-price-check/
+├── SKILL.md                      workflow, how to read tiers and ladders
+├── references/
+│   ├── providers.md              registrar API comparison + the parsing trap
+│   └── launch-phases.md          sunrise/EAP/GA mechanics, EAP economics
+├── scripts/check_domains.py      availability, tier, renewal, phase ladder
+└── scripts/test_check_domains.py contract tests pinning the parser to real payloads
+```
+
+```bash
+python3 -m unittest discover -s skills/domain-price-check/scripts -p 'test_*.py'
+```
+
+#### On the data source
+
+Gandi's documented `/v5/domain/check` is the only supported API that both carries TLDs **before** General Availability and returns the per-phase price ladder. Spaceship, Dynadot, Porkbun and Namecheap all return premium pricing but list a TLD only once it goes live — which excludes exactly the launches worth researching. Domainr/Fastly has the best availability coverage of any provider and returns no prices at all, so it complements rather than replaces.
+
+### Design notes
+
+The skill refuses to guess. Availability without a resolvable RDAP service reports `unknown`, a rejected API key warns loudly instead of degrading into silent blanks, and a taken domain shows no tier rather than an inherited default — because in this domain a confident wrong number costs real money on a recurring basis.
+
+One trap is worth naming for anyone reading the registry response directly: in `products[process=create]`, the `prices[]` and `periods[]` arrays look parallel and are not. Prices come back in arbitrary order, each tagged under `options.phase`. Zipping by index scrambles the entire Early Access ladder while looking plausible, because `golive` tends to land last in both — which is precisely how the bug survives an eyeball check.
+
+### References
+
+- [Gandi API documentation](https://api.gandi.net/docs/domains/) — `/v5/domain/check`, premium and per-phase pricing
+- [IANA RDAP bootstrap registry](https://data.iana.org/rdap/dns.json) — authoritative RDAP server per TLD
+- [ICANN TLD startup information](https://newgtlds.icann.org/en/program-status/sunrise-claims-periods) — sunrise and claims periods, 2012 round only
+- [Chromium HSTS preload list](https://source.chromium.org/chromium/chromium/src/+/main:net/http/transport_security_state_static.json) — which TLDs browsers force to HTTPS; registrar marketing is not a reliable guide
+- [CSC weekly launch guide](https://www.cscdbs.com/blog/) — upcoming gTLD launches, published as prose
 
 ## License
 
